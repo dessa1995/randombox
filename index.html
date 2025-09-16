@@ -463,7 +463,6 @@
 
             for(let i=0;i<num;i++) ladderData.connections.push({from:i,to:i});
 
-            // 복잡도에 따른 극명한 차이
             const rungCount=(num*2)*complexity;
             for(let i=0;i<rungCount;i++){
                 const y1=yMargin+Math.random()*ladderHeight;
@@ -551,12 +550,35 @@
             }
 
             // 반짝이 효과 그리기
-            sparkles.forEach(s=>{
+            updateAndDrawLadderSparkles();
+        }
+
+        // --- NEW --- 사다리 파티클 효과 업데이트 및 그리기 함수
+        function updateAndDrawLadderSparkles() {
+            for (let i = sparkles.length - 1; i >= 0; i--) {
+                const p = sparkles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life--;
+                p.size *= 0.98; // 시간이 지나면서 크기 감소
+
+                if (p.life <= 0 || p.size < 0.5) {
+                    sparkles.splice(i, 1);
+                    continue;
+                }
+
+                lCtx.save();
+                lCtx.globalAlpha = p.life / p.initialLife; // 서서히 사라지는 효과
                 lCtx.beginPath();
-                lCtx.fillStyle=COLORS.blue;
-                lCtx.arc(s.x,s.y,4,0,2*Math.PI);
+                lCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2, false);
+                lCtx.fillStyle = p.color;
+
+                lCtx.shadowColor = p.color; // 글로우 효과
+                lCtx.shadowBlur = 15;
+                
                 lCtx.fill();
-            });
+                lCtx.restore();
+            }
         }
 
         function tracePath(startIndex){
@@ -592,24 +614,53 @@
             const resultIndex=current;
 
             let start=null;
+            let pathTraceComplete = false;
             function animate(t){
                 if(!start) start=t;
-                let prog=Math.min((t-start)/2000,1);
+                let prog=Math.min((t-start)/3000,1); // 애니메이션 시간 3초로 조정
                 if(animationSkipped) prog=1;
 
-                const idx=Math.floor(prog*(points.length-1));
-                const x=points[idx].x, y=points[idx].y;
-                sparkles=[{x,y}];
-                drawLadder();
+                if (prog < 1) {
+                    // 경로를 따라 부드럽게 이동하는 위치 계산
+                    const pointIdx = prog * (points.length - 1);
+                    const idx = Math.floor(pointIdx);
+                    const segmentProg = pointIdx - idx;
+                    
+                    const p1 = points[idx];
+                    const p2 = points[Math.min(idx + 1, points.length - 1)];
 
-                if(prog<1) requestAnimationFrame(animate);
-                else{
+                    const x = p1.x + (p2.x - p1.x) * segmentProg;
+                    const y = p1.y + (p2.y - p1.y) * segmentProg;
+
+                    // 현재 위치에 새로운 파티클 생성
+                    const particleCount = 4;
+                    for (let i = 0; i < particleCount; i++) {
+                        const angle = Math.random() * Math.PI * 2;
+                        const speed = Math.random() * 2.5 + 0.5;
+                        const life = Math.random() * 50 + 30;
+                        sparkles.push({
+                            x, y,
+                            vx: Math.cos(angle) * speed,
+                            vy: Math.sin(angle) * speed,
+                            size: Math.random() * 5 + 5, // 파티클 크기 증가
+                            color: `hsl(${195 + Math.random() * 30}, 100%, 70%)`, // 파란색~청록색 계열
+                            life: life,
+                            initialLife: life
+                        });
+                    }
+                } else if (!pathTraceComplete) {
+                    pathTraceComplete = true; // 결과 표시 (한 번만 실행)
                     ladderData.revealed.add(resultIndex);
                     ladderData.summary[startIndex]=`${ladderData.names[startIndex]}: ${ladderData.results[resultIndex]}`;
                     ladderResultBtn.style.display='inline-block';
-                    sparkles=[];
-                    drawLadder();
-                    tracing=false;
+                }
+                
+                drawLadder();
+
+                if(prog < 1 || sparkles.length > 0) { // 경로 추적이 끝나도 파티클이 남아있으면 계속 애니메이션
+                    requestAnimationFrame(animate);
+                } else {
+                    tracing = false;
                     if(ladderData.revealed.size===ladderData.names.length){
                         ladderStatusEl.textContent='모든 결과를 확인했습니다!';
                         showResultModal('사다리타기 전체 결과',ladderData.summary.filter(Boolean));
