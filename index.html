@@ -82,7 +82,7 @@
             background:#EEE8D5;border:2px solid var(--primary-color);box-shadow:3px 3px 8px var(--shadow-color);
             max-width:100%;display:block;border-radius:8px;cursor:pointer
         }
-        #roulette-result,#drawing-status,#ladder-status{margin-top:15px;font-size:1rem;color:var(--accent-color);min-height:25px}
+        #roulette-result,#drawing-status,#ladder-status, #number-picker-result{margin-top:15px;font-size:1rem;color:var(--accent-color);min-height:25px}
         .radio-group label{display:inline-block;margin:5px 10px;font-size:.8rem}
         #ladder-options{display:none}
 
@@ -109,6 +109,7 @@
             <button class="pixel-button" data-screen="roulette-screen">룰렛</button>
             <button class="pixel-button" data-screen="ladder-screen">사다리타기</button>
             <button class="pixel-button" data-screen="drawing-screen">뽑기</button>
+            <button class="pixel-button" data-screen="number-picker-screen">숫자 뽑기</button>
         </div>
     </div>
 
@@ -185,6 +186,30 @@
             <button class="pixel-button back-button">뒤로가기</button>
         </div>
     </div>
+    
+    <!-- 랜덤 숫자 뽑기 -->
+    <div id="number-picker-screen" class="screen">
+        <div class="game-container">
+            <h1>랜덤 숫자 뽑기</h1>
+            <canvas id="number-picker-canvas" class="game-canvas"></canvas>
+            <div id="number-picker-result"></div>
+            <div class="input-group radio-group">
+                <label><input type="radio" name="number-mode" value="range" checked> 범위로 입력</label>
+                <label><input type="radio" name="number-mode" value="direct"> 직접 입력</label>
+            </div>
+            <div class="input-group" id="number-range-container">
+                <label for="number-range-input">숫자 범위 (예: 1-45, 50-60)</label>
+                <input type="text" id="number-range-input" placeholder="1-45">
+            </div>
+            <div class="input-group" id="number-direct-container" style="display: none;">
+                 <label for="number-direct-input">숫자 직접 입력 (쉼표/공백으로 구분)</label>
+                 <input type="text" id="number-direct-input" placeholder="7, 13, 21, 35">
+            </div>
+            <button class="pixel-button" id="generate-numbers-button">숫자판 생성</button>
+            <button class="pixel-button" id="pick-number-button" style="display:none;">뽑기!</button>
+            <button class="pixel-button back-button">뒤로가기</button>
+        </div>
+    </div>
 
     <!-- 사용 설명 모달 -->
     <button id="how-to-play-button" class="pixel-button">?</button>
@@ -209,6 +234,12 @@
             <ul>
                 <li>참가자와 뽑을 갯수 등을 설정하고 '뽑기판 생성'을 누르세요.</li>
                 <li>생성된 봉투를 클릭하여 결과를 확인하세요.</li>
+            </ul>
+            <h3>랜덤 숫자 뽑기</h3>
+            <ul>
+                <li>'범위로 입력' 또는 '직접 입력'을 선택하고 숫자를 입력하세요.</li>
+                <li>'숫자판 생성' 버튼을 눌러 공을 생성합니다.</li>
+                <li>'뽑기!' 버튼을 누르면 애니메이션 후 숫자가 추첨됩니다.</li>
             </ul>
             <h3>결과 캡처하기</h3>
             <ul>
@@ -257,6 +288,7 @@
                 if(id==='roulette-screen') initRoulette();
                 if(id==='ladder-screen') initLadder();
                 if(id==='drawing-screen') initDrawing();
+                if(id==='number-picker-screen') initNumberPicker();
             }
             resizeCanvases();
         }
@@ -463,13 +495,48 @@
 
             for(let i=0;i<num;i++) ladderData.connections.push({from:i,to:i});
 
-            const rungCount=(num*2)*complexity;
-            for(let i=0;i<rungCount;i++){
-                const y1=yMargin+Math.random()*ladderHeight;
-                const from=Math.floor(Math.random()*(num-1));
-                if(ladderData.paths.some(p=>Math.abs(p.y1-y1)<20 && (p.from===from || p.from===from-1))) continue;
-                ladderData.paths.push({y1,y2:y1,from,to:from+1});
+            // --- 사다리 생성 로직 개선 ---
+            const rungPositions = new Set();
+            const minVGap = 25;
+
+            // 1. 모든 세로줄이 연결되도록 최소한의 가로줄 생성
+            const backbone = Array.from({length: num - 1}, (_, i) => i);
+            for (let i = backbone.length - 1; i > 0; i--) { // Shuffle
+                const j = Math.floor(Math.random() * (i + 1));
+                [backbone[i], backbone[j]] = [backbone[j], backbone[i]];
             }
+            
+            backbone.forEach(from => {
+                 let y1, attempts = 0;
+                 do {
+                     y1 = yMargin + Math.random() * ladderHeight;
+                     attempts++;
+                 } while (Array.from(rungPositions).some(y => Math.abs(y - y1) < minVGap) && attempts < 100);
+                 
+                 if (attempts < 100) {
+                     rungPositions.add(y1);
+                     const y2 = y1 + (Math.random() - 0.5) * 20;
+                     ladderData.paths.push({y1, y2, from, to: from + 1});
+                 }
+            });
+
+            // 2. 복잡도에 따라 추가 가로줄 생성
+            const extraRungCount = Math.max(0, (num * complexity) - (num - 1));
+            for(let i = 0; i < extraRungCount; i++) {
+                let y1, attempts = 0;
+                do {
+                     y1 = yMargin + Math.random() * ladderHeight;
+                     attempts++;
+                 } while (Array.from(rungPositions).some(y => Math.abs(y - y1) < minVGap) && attempts < 100);
+
+                if (attempts < 100) {
+                     rungPositions.add(y1);
+                     const from = Math.floor(Math.random()*(num-1));
+                     const y2 = y1 + (Math.random() - 0.5) * 20;
+                     ladderData.paths.push({y1, y2, from, to: from + 1});
+                 }
+            }
+            // --- 로직 개선 끝 ---
 
             ladderData.connections.forEach(c=>c.to=c.from);
             [...ladderData.paths].sort((a,b)=>a.y1-b.y1).forEach(p=>{
@@ -488,7 +555,6 @@
             const dpr=window.devicePixelRatio||1;
             const width=ladderCanvas.width/dpr;
             const height=ladderCanvas.height/dpr;
-
             lCtx.clearRect(0,0,ladderCanvas.width,ladderCanvas.height);
 
             if(!ladderData.names || ladderData.names.length<2){
@@ -502,9 +568,10 @@
                 return;
             }
 
-            const num=ladderData.names.length;
-            const spacing=width/num;
-            const textPadding=25;
+            const num = ladderData.names.length;
+            const fontSize = Math.max(8, Math.min(14, 18 - num));
+            const textPadding = fontSize + 15;
+            const spacing = width / num;
 
             // 세로줄
             lCtx.lineWidth=4;
@@ -523,7 +590,7 @@
             });
 
             // 상단 이름
-            lCtx.font="14px 'Press Start 2P'";
+            lCtx.font=`${fontSize}px 'Press Start 2P'`;
             lCtx.textAlign='center';
             lCtx.fillStyle=PURE_BLACK;
             for(let i=0;i<num;i++){
@@ -532,35 +599,43 @@
             }
 
             // 하단 결과
-            lCtx.font="14px 'Press Start 2P'";
+            lCtx.font=`${fontSize}px 'Press Start 2P'`;
             lCtx.textAlign='center';
             for(let i=0;i<num;i++){
                 const x=spacing*(i+0.5), resultY=height-textPadding+10;
+                
+                // --- ??? 박스 겹침 문제 해결 ---
                 if(ladderData.revealed.has(i)){
+                    const resultText = ladderData.results[i];
+                    const textWidth = lCtx.measureText(resultText).width;
+                    const boxHeight = fontSize + 14;
+                    // 결과 텍스트를 그리기 전에 해당 영역을 배경색으로 덮어씌움
+                    lCtx.fillStyle = '#EEE8D5'; 
+                    lCtx.fillRect(x - (textWidth + 24)/2, resultY - boxHeight + 3, textWidth + 24, boxHeight);
+                    
                     lCtx.fillStyle=PURE_BLACK;
-                    lCtx.fillText(ladderData.results[i],x,resultY);
+                    lCtx.fillText(resultText, x, resultY);
                 }else{
                     lCtx.fillStyle=PURE_BLACK;
                     const tw=lCtx.measureText('???').width;
-                    const boxW=tw+24, boxH=28;
+                    const boxW=tw+24, boxH=fontSize + 14;
                     lCtx.fillRect(x-boxW/2,resultY-boxH+5,boxW,boxH);
                     lCtx.fillStyle=PURE_WHITE;
                     lCtx.fillText('???',x,resultY);
                 }
+                // --- 문제 해결 끝 ---
             }
 
-            // 반짝이 효과 그리기
             updateAndDrawLadderSparkles();
         }
 
-        // --- NEW --- 사다리 파티클 효과 업데이트 및 그리기 함수
         function updateAndDrawLadderSparkles() {
             for (let i = sparkles.length - 1; i >= 0; i--) {
                 const p = sparkles[i];
                 p.x += p.vx;
                 p.y += p.vy;
                 p.life--;
-                p.size *= 0.98; // 시간이 지나면서 크기 감소
+                p.size *= 0.98;
 
                 if (p.life <= 0 || p.size < 0.5) {
                     sparkles.splice(i, 1);
@@ -568,14 +643,12 @@
                 }
 
                 lCtx.save();
-                lCtx.globalAlpha = p.life / p.initialLife; // 서서히 사라지는 효과
+                lCtx.globalAlpha = p.life / p.initialLife;
                 lCtx.beginPath();
                 lCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2, false);
                 lCtx.fillStyle = p.color;
-
-                lCtx.shadowColor = p.color; // 글로우 효과
+                lCtx.shadowColor = p.color;
                 lCtx.shadowBlur = 15;
-                
                 lCtx.fill();
                 lCtx.restore();
             }
@@ -588,26 +661,38 @@
             const dpr=window.devicePixelRatio||1;
             const width=ladderCanvas.width/dpr, height=ladderCanvas.height/dpr;
             const num=ladderData.names.length;
-            const spacing=width/num, textPadding=25;
+            const spacing=width/num;
+            const fontSize = Math.max(8, Math.min(14, 18 - num));
+            const textPadding = fontSize + 15;
 
             let current=startIndex, currentY=textPadding+15;
             const points=[{x:spacing*(current+0.5), y:currentY}];
-            const rungs=[...ladderData.paths.map(p=>({...p}))];
+            const rungs=[...ladderData.paths].sort((a, b) => a.y1 - b.y1);
 
             while(true){
-                let next=null, nextIdx=-1, connectY=Infinity;
+                let next=null, nextIdx=-1;
                 for(let i=0;i<rungs.length;i++){
-                    const r=rungs[i];
-                    if(r.from===current||r.to===current){
-                        const startY=r.y1;
-                        if(startY>=currentY && startY<connectY){ connectY=startY; next=r; nextIdx=i; }
+                     const r = rungs[i];
+                    if (r.from === current || r.to === current) {
+                        const startY = (r.from === current) ? r.y1 : r.y2;
+                        if (startY >= currentY - 0.1) { // Epsilon for floating point
+                           next = r;
+                           nextIdx = i;
+                           break; 
+                        }
                     }
                 }
+                
                 if(next){
-                    points.push({x:spacing*(current+0.5), y:connectY});
-                    current=(next.from===current)?next.to:next.from;
-                    points.push({x:spacing*(current+0.5), y:connectY});
-                    currentY=connectY; rungs.splice(nextIdx,1);
+                    const r = rungs.splice(nextIdx, 1)[0];
+                    const isMovingFromLeft = r.from === current;
+                    const startY = isMovingFromLeft ? r.y1 : r.y2;
+                    const endY = isMovingFromLeft ? r.y2 : r.y1;
+                    
+                    points.push({x:spacing*(current+0.5), y:startY});
+                    current=(r.from===current)?r.to:r.from;
+                    points.push({x:spacing*(current+0.5), y:endY});
+                    currentY=endY;
                 }else break;
             }
             points.push({x:spacing*(current+0.5), y:height-textPadding-15});
@@ -617,24 +702,19 @@
             let pathTraceComplete = false;
             function animate(t){
                 if(!start) start=t;
-                let prog=Math.min((t-start)/3000,1); // 애니메이션 시간 3초로 조정
+                let prog=Math.min((t-start)/1500,1); // Faster animation
                 if(animationSkipped) prog=1;
 
                 if (prog < 1) {
-                    // 경로를 따라 부드럽게 이동하는 위치 계산
                     const pointIdx = prog * (points.length - 1);
                     const idx = Math.floor(pointIdx);
                     const segmentProg = pointIdx - idx;
-                    
                     const p1 = points[idx];
                     const p2 = points[Math.min(idx + 1, points.length - 1)];
-
                     const x = p1.x + (p2.x - p1.x) * segmentProg;
                     const y = p1.y + (p2.y - p1.y) * segmentProg;
 
-                    // 현재 위치에 새로운 파티클 생성
-                    const particleCount = 4;
-                    for (let i = 0; i < particleCount; i++) {
+                    for (let i = 0; i < 4; i++) {
                         const angle = Math.random() * Math.PI * 2;
                         const speed = Math.random() * 2.5 + 0.5;
                         const life = Math.random() * 50 + 30;
@@ -642,14 +722,14 @@
                             x, y,
                             vx: Math.cos(angle) * speed,
                             vy: Math.sin(angle) * speed,
-                            size: Math.random() * 5 + 5, // 파티클 크기 증가
-                            color: `hsl(${195 + Math.random() * 30}, 100%, 70%)`, // 파란색~청록색 계열
+                            size: Math.random() * 5 + 5,
+                            color: `hsl(${195 + Math.random() * 30}, 100%, 70%)`,
                             life: life,
                             initialLife: life
                         });
                     }
                 } else if (!pathTraceComplete) {
-                    pathTraceComplete = true; // 결과 표시 (한 번만 실행)
+                    pathTraceComplete = true;
                     ladderData.revealed.add(resultIndex);
                     ladderData.summary[startIndex]=`${ladderData.names[startIndex]}: ${ladderData.results[resultIndex]}`;
                     ladderResultBtn.style.display='inline-block';
@@ -657,7 +737,7 @@
                 
                 drawLadder();
 
-                if(prog < 1 || sparkles.length > 0) { // 경로 추적이 끝나도 파티클이 남아있으면 계속 애니메이션
+                if(prog < 1 || sparkles.length > 0) {
                     requestAnimationFrame(animate);
                 } else {
                     tracing = false;
@@ -678,7 +758,7 @@
         ladderResultBtn.addEventListener('click',()=>{
             if(!ladderData.names || tracing) return;
             for(let i=0;i<ladderData.names.length;i++){
-                const resultIndex=ladderData.connections[i].to;
+                const resultIndex=ladderData.connections.find(c => c.from === i).to;
                 ladderData.revealed.add(resultIndex);
                 ladderData.summary[i]=`${ladderData.names[i]}: ${ladderData.results[resultIndex]}`;
             }
@@ -695,7 +775,9 @@
             const x=e.clientX-rect.left, y=e.clientY-rect.top;
             const num=ladderData.names.length;
             const spacing=ladderCanvas.clientWidth/num;
-            if(y<60){
+            const fontSize = Math.max(8, Math.min(14, 18 - num));
+            const textPadding = fontSize + 15;
+            if(y < textPadding * 2){ // Increase clickable area
                 const idx=Math.floor(x/spacing);
                 if(idx>=0 && idx<num) tracePath(idx);
             }
@@ -795,6 +877,249 @@
             if(drawingState.summary) showResultModal('뽑기 결과',drawingState.summary);
         });
 
+        /* ---------------- 랜덤 숫자 뽑기 ---------------- */
+        const numberPickerCanvas = document.getElementById('number-picker-canvas');
+        const npCtx = numberPickerCanvas.getContext('2d');
+        const generateNumbersButton = document.getElementById('generate-numbers-button');
+        const pickNumberButton = document.getElementById('pick-number-button');
+        let numberBalls = [];
+        let numberPickerAnimationId = null;
+        let numberPickerState = { picking: false, winner: null, phase: 'idle' }; // idle, mixing, announcing, finished
+
+        function initNumberPicker() {
+            if (numberPickerAnimationId) cancelAnimationFrame(numberPickerAnimationId);
+            numberPickerAnimationId = null;
+
+            numberBalls = [];
+            numberPickerState = { picking: false, winner: null, phase: 'idle' };
+            document.getElementById('number-picker-result').textContent = '';
+            pickNumberButton.style.display = 'none';
+            generateNumbersButton.textContent = '숫자판 생성';
+            generateNumbersButton.disabled = false;
+            pickNumberButton.disabled = false;
+            
+            drawNumberPicker();
+
+            document.querySelectorAll('input[name="number-mode"]').forEach(radio => {
+                radio.onchange = (e) => {
+                    const isRange = e.target.value === 'range';
+                    document.getElementById('number-range-container').style.display = isRange ? 'block' : 'none';
+                    document.getElementById('number-direct-container').style.display = isRange ? 'none' : 'block';
+                };
+            });
+        }
+
+        function drawEnlargedWinner(winner) {
+            const dpr = window.devicePixelRatio || 1;
+            const width = numberPickerCanvas.width / dpr;
+            const height = numberPickerCanvas.height / dpr;
+            
+            npCtx.fillStyle = '#EEE8D5';
+            npCtx.fillRect(0, 0, width, height);
+
+            const centerX = width / 2;
+            const centerY = height / 2;
+            const radius = Math.min(width, height) / 3;
+
+            npCtx.beginPath();
+            npCtx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+            npCtx.fillStyle = winner.color;
+            npCtx.fill();
+            npCtx.strokeStyle = PURE_WHITE;
+            npCtx.lineWidth = 6;
+            npCtx.stroke();
+
+            npCtx.fillStyle = PURE_WHITE;
+            npCtx.textAlign = 'center';
+            npCtx.textBaseline = 'middle';
+            const fontSize = radius * 0.7;
+            npCtx.font = `${fontSize}px 'Press Start 2P'`;
+            npCtx.fillText(winner.num, centerX, centerY + 4);
+        }
+
+        function drawNumberPicker() {
+            const dpr = window.devicePixelRatio || 1;
+            const width = numberPickerCanvas.width / dpr;
+            const height = numberPickerCanvas.height / dpr;
+
+            npCtx.fillStyle = '#EEE8D5';
+            npCtx.fillRect(0, 0, width, height);
+            
+            numberBalls.forEach(ball => {
+                npCtx.beginPath();
+                npCtx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
+                npCtx.fillStyle = ball.color;
+                npCtx.fill();
+
+                npCtx.fillStyle = PURE_WHITE;
+                npCtx.textAlign = 'center';
+                npCtx.textBaseline = 'middle';
+                const fontSize = Math.max(10, ball.r * 0.7);
+                npCtx.font = `${fontSize}px 'Press Start 2P'`;
+                npCtx.fillText(ball.num, ball.x, ball.y + 2);
+            });
+            
+            if (numberBalls.length === 0 && numberPickerState.phase === 'idle') {
+                npCtx.font = "12px 'Press Start 2P'";
+                npCtx.textAlign = 'center';
+                npCtx.fillStyle = COLORS.font;
+                npCtx.fillText("숫자 입력 후 생성", width / 2, height / 2 - 10);
+                npCtx.fillText("버튼을 누르세요", width / 2, height / 2 + 15);
+            }
+        }
+
+        function numberPickerLoop() {
+            const dpr = window.devicePixelRatio || 1;
+            const width = numberPickerCanvas.width / dpr;
+            const height = numberPickerCanvas.height / dpr;
+
+            if (numberPickerState.phase === 'announcing' && numberPickerState.winner) {
+                const winner = numberPickerState.winner;
+                const targetRadius = Math.min(width, height) / 3;
+                
+                winner.r += (targetRadius - winner.r) * 0.05;
+                winner.x += (width/2 - winner.x) * 0.05;
+                winner.y += (height/2 - winner.y) * 0.05;
+                winner.vx *= 0.9;
+                winner.vy *= 0.9;
+
+                numberBalls.forEach(ball => {
+                    if (ball.num === winner.num) return;
+                    const dx = ball.x - winner.x;
+                    const dy = ball.y - winner.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    const minDist = ball.r + winner.r;
+                    if (dist < minDist) {
+                        const angle = Math.atan2(dy, dx);
+                        ball.vx += Math.cos(angle) * 1.5;
+                        ball.vy += Math.sin(angle) * 1.5;
+                    }
+                     // Move other balls off-screen
+                    if (ball.x < width / 2) ball.vx -= 0.5; else ball.vx += 0.5;
+                    if (ball.y < height / 2) ball.vy -= 0.5; else ball.vy += 0.5;
+                });
+            } else {
+                 numberBalls.forEach(ball => {
+                    ball.x += ball.vx;
+                    ball.y += ball.vy;
+
+                    if (ball.x - ball.r < 0) { ball.x = ball.r; ball.vx *= -1; }
+                    if (ball.x + ball.r > width) { ball.x = width - ball.r; ball.vx *= -1; }
+                    if (ball.y - ball.r < 0) { ball.y = ball.r; ball.vy *= -1; }
+                    if (ball.y + ball.r > height) { ball.y = height - ball.r; ball.vy *= -1; }
+                });
+            }
+            
+            drawNumberPicker();
+            numberPickerAnimationId = requestAnimationFrame(numberPickerLoop);
+        }
+
+        function parseNumbers() {
+            const mode = document.querySelector('input[name="number-mode"]:checked').value;
+            const numberSet = new Set();
+            try {
+                if (mode === 'range') {
+                    const input = document.getElementById('number-range-input').value;
+                    if (!input.trim()) return [];
+                    input.split(',').forEach(rangeStr => {
+                        const parts = rangeStr.trim().split('-');
+                        if (parts.length > 2 || parts.length < 1 || (parts.length === 1 && !/^\d+$/.test(parts[0]))) throw new Error('잘못된 범위 형식입니다. (예: 1-10, 15)');
+                        const start = parseInt(parts[0], 10);
+                        const end = parts.length === 2 ? parseInt(parts[1], 10) : start;
+                        if (isNaN(start) || isNaN(end) || start > end) throw new Error('범위가 올바르지 않습니다.');
+                        for (let i = start; i <= end; i++) numberSet.add(i);
+                    });
+                } else {
+                    const input = document.getElementById('number-direct-input').value;
+                    if (!input.trim()) return [];
+                    input.split(/[\s,]+/).forEach(numStr => {
+                        if (numStr.trim()) {
+                            const num = parseInt(numStr.trim(), 10);
+                            if (isNaN(num)) throw new Error('숫자가 아닌 값이 포함되어 있습니다.');
+                            numberSet.add(num);
+                        }
+                    });
+                }
+            } catch (error) {
+                showResultModal('입력 오류', error.message);
+                return null;
+            }
+            return Array.from(numberSet);
+        }
+
+        function generateNumbers() {
+            const numbers = parseNumbers();
+            if (!numbers) return;
+            if (numbers.length < 2) {
+                showResultModal('오류', '뽑을 숫자는 2개 이상이어야 합니다.');
+                return;
+            }
+
+            if (numberPickerAnimationId) cancelAnimationFrame(numberPickerAnimationId);
+
+            const dpr = window.devicePixelRatio || 1;
+            const width = numberPickerCanvas.width / dpr;
+            const height = numberPickerCanvas.height / dpr;
+            const radius = Math.max(15, Math.min(30, (width / Math.sqrt(numbers.length)) * 0.8));
+
+            numberBalls = numbers.map(num => ({
+                num: num, r: radius,
+                x: Math.random() * (width - radius * 2) + radius,
+                y: Math.random() * (height - radius * 2) + radius,
+                vx: (Math.random() - 0.5) * 4,
+                vy: (Math.random() - 0.5) * 4,
+                color: ROULETTE_COLORS[Math.floor(Math.random() * ROULETTE_COLORS.length)]
+            }));
+            
+            numberPickerState = { picking: false, winner: null, phase: 'idle' };
+            document.getElementById('number-picker-result').textContent = '';
+            pickNumberButton.style.display = 'inline-block';
+            pickNumberButton.disabled = false;
+            generateNumbersButton.textContent = '재생성';
+            numberPickerLoop();
+        }
+
+        function pickNumber() {
+            if (numberBalls.length === 0 || numberPickerState.picking) return;
+
+            numberPickerState.picking = true;
+            numberPickerState.phase = 'mixing';
+            const resultEl = document.getElementById('number-picker-result');
+
+            pickNumberButton.disabled = true;
+            generateNumbersButton.disabled = true;
+            resultEl.textContent = '숫자를 뽑고 있습니다...';
+
+            numberBalls.forEach(ball => {
+                ball.vx *= (Math.random() * 1.5 + 2);
+                ball.vy *= (Math.random() * 1.5 + 2);
+            });
+
+            setTimeout(() => {
+                const winner = numberBalls[Math.floor(Math.random() * numberBalls.length)];
+                numberPickerState.winner = winner;
+                numberPickerState.phase = 'announcing';
+                
+                setTimeout(() => {
+                    if (numberPickerAnimationId) cancelAnimationFrame(numberPickerAnimationId);
+                    numberPickerAnimationId = null;
+                    
+                    numberPickerState.phase = 'finished';
+                    drawEnlargedWinner(winner);
+                    resultEl.textContent = `당첨 숫자: ${winner.num}`;
+                    showResultModal('랜덤 숫자 뽑기 결과', `🎉 ${winner.num} 🎉`);
+    
+                    pickNumberButton.disabled = false;
+                    generateNumbersButton.disabled = false;
+                    numberPickerState.picking = false;
+                }, 2500); // Announcing phase duration
+            }, 2000); // Mixing phase duration
+        }
+
+        generateNumbersButton.addEventListener('click', generateNumbers);
+        pickNumberButton.addEventListener('click', pickNumber);
+
+
         /* --- 리사이즈 & 초기화 --- */
         function resizeCanvases(){
             const canvases=document.querySelectorAll('.game-canvas');
@@ -803,7 +1128,7 @@
                 const style=getComputedStyle(container);
                 const containerWidth=container.clientWidth-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight);
                 const dpr=window.devicePixelRatio||1;
-                const aspect=canvas.id==='ladder-canvas'?0.75:1;
+                const aspect = canvas.id==='ladder-canvas' ? 0.75 : (canvas.id === 'number-picker-canvas' ? 0.65 : 1);
 
                 canvas.style.width=containerWidth+'px';
                 canvas.style.height=(containerWidth*aspect)+'px';
@@ -814,9 +1139,11 @@
             });
             if(document.getElementById('roulette-screen').classList.contains('active')) drawRoulette();
             if(document.getElementById('ladder-screen').classList.contains('active')) drawLadder();
+            if(document.getElementById('number-picker-screen').classList.contains('active')) drawNumberPicker();
         }
         window.addEventListener('resize',resizeCanvases);
         document.addEventListener('DOMContentLoaded',()=>{ showScreen('main-menu'); });
     </script>
 </body>
 </html>
+
