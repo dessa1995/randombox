@@ -228,9 +228,8 @@
             <div id="result-modal-body"></div>
         </div>
     </div>
-
     <script>
-        /* ---------- 캔버스에서 쓸 색: CSS 변수 → 실제 색값으로 고정 ---------- */
+        /* ---------- 캔버스 색상 ---------- */
         const CSS = getComputedStyle(document.documentElement);
         const COLORS = {
             font: (CSS.getPropertyValue('--font-color')||'#073642').trim(),
@@ -238,39 +237,17 @@
             accent: (CSS.getPropertyValue('--accent-color')||'#D33682').trim(),
             blue: (CSS.getPropertyValue('--highlight-blue')||'#268BD2').trim()
         };
-        const PURE_BLACK = '#000000';
-        const PURE_WHITE = '#ffffff';
+        const PURE_BLACK = "#000000";
+        const PURE_WHITE = "#ffffff";
 
         const ROULETTE_COLORS = ["#268BD2","#D33682","#859900","#2AA198","#B58900","#CB4B16","#6C71C4"];
 
-        /* --- 전역 및 공통 --- */
+        /* --- 공통 화면 전환 & 모달 --- */
         const screens=document.querySelectorAll('.screen');
         const backButtons=document.querySelectorAll('.back-button');
         const howToPlayModal=document.getElementById('how-to-play-modal');
         const resultModal=document.getElementById('result-modal');
         const howToPlayButton=document.getElementById('how-to-play-button');
-        function createDynamicInputs(containerId, initialCount=2){
-            const container=document.getElementById(containerId);
-            container.innerHTML='';
-            for(let i=0;i<initialCount;i++) addInputRow(container,`항목 ${i+1}`);
-        }
-        function addInputRow(container, placeholder=''){
-            const row=document.createElement('div');
-            row.className='input-row';
-            row.innerHTML=`<input type="text" placeholder="${placeholder}" value=""><button class="remove-button">-</button>`;
-            container.appendChild(row);
-        }
-        document.body.addEventListener('click',e=>{
-            if(e.target.classList.contains('add-input-button')){
-                const container=document.getElementById(e.target.dataset.container);
-                addInputRow(container,`항목 ${container.children.length+1}`);
-            }
-            if(e.target.classList.contains('remove-button')){
-                const row=e.target.parentElement;
-                if(row.parentElement.children.length>2) row.remove();
-                else showResultModal('오류','항목은 최소 2개 이상이어야 합니다.');
-            }
-        });
 
         function showScreen(id){
             screens.forEach(s=>s.classList.remove('active'));
@@ -304,6 +281,30 @@
             resultModal.style.display='flex';
         }
 
+        /* --- 동적 입력 관리 --- */
+        function createDynamicInputs(containerId, initialCount=2){
+            const container=document.getElementById(containerId);
+            container.innerHTML='';
+            for(let i=0;i<initialCount;i++) addInputRow(container,`항목 ${i+1}`);
+        }
+        function addInputRow(container, placeholder=''){
+            const row=document.createElement('div');
+            row.className='input-row';
+            row.innerHTML=`<input type="text" placeholder="${placeholder}" value=""><button class="remove-button">-</button>`;
+            container.appendChild(row);
+        }
+        document.body.addEventListener('click',e=>{
+            if(e.target.classList.contains('add-input-button')){
+                const container=document.getElementById(e.target.dataset.container);
+                addInputRow(container,`항목 ${container.children.length+1}`);
+            }
+            if(e.target.classList.contains('remove-button')){
+                const row=e.target.parentElement;
+                if(row.parentElement.children.length>2) row.remove();
+                else showResultModal('오류','항목은 최소 2개 이상이어야 합니다.');
+            }
+        });
+
         function getDynamicInputValues(containerId){
             const container=document.getElementById(containerId);
             return Array.from(container.querySelectorAll('input[type="text"]'))
@@ -311,7 +312,7 @@
                 .filter(v=>v!=='');
         }
 
-        /* ------------- 룰렛 ------------- */
+        /* ---------------- 룰렛 ---------------- */
         const rouletteCanvas=document.getElementById('roulette-canvas');
         const rCtx=rouletteCanvas.getContext('2d');
         const generateRouletteButton=document.getElementById('generate-roulette-button');
@@ -357,7 +358,6 @@
                 rCtx.restore();
             }
 
-            // 포인터
             rCtx.fillStyle=COLORS.font;
             rCtx.beginPath();
             rCtx.moveTo(cx+radius-5,cy);
@@ -375,13 +375,12 @@
             generateRouletteButton.textContent='재생성';
             rouletteResultEl.textContent='';
         }
-        function skipRouletteAnimation(){ rouletteSkip=true; }
+
         function spinAnimation(){
             if(rouletteSpinning) return;
             rouletteSpinning=true; rouletteSkip=false;
             rouletteResultEl.textContent='...';
             spinButton.disabled=true; generateRouletteButton.disabled=true;
-            rouletteCanvas.addEventListener('click',skipRouletteAnimation);
 
             const speed=rouletteSpeedSlider.value;
             const spinAngleTotal=Math.random()*10+10*speed;
@@ -396,7 +395,6 @@
 
                 if(progress<duration && !rouletteSkip) requestAnimationFrame(animate);
                 else{
-                    rouletteCanvas.removeEventListener('click',skipRouletteAnimation);
                     rouletteSpinning=false;
                     const finalAngle=rouletteSkip?(spinAngleTotal%(2*Math.PI)):rouletteAngle;
                     const arc=2*Math.PI/rouletteItems.length;
@@ -419,7 +417,7 @@
         generateRouletteButton.addEventListener('click',generateRoulette);
         spinButton.addEventListener('click',spinAnimation);
 
-        /* ------------- 사다리 ------------- */
+        /* ---------------- 사다리 ---------------- */
         const ladderCanvas=document.getElementById('ladder-canvas');
         const lCtx=ladderCanvas.getContext('2d');
         const ladderGenerateBtn=document.getElementById('ladder-generate-button');
@@ -434,15 +432,6 @@
         let ladderData={}, animationSkipped=false, tracing=false, sparkles=[];
 
         ladderComplexitySlider.addEventListener('input',e=>{ ladderComplexityValue.textContent=e.target.value; });
-        document.querySelectorAll('input[name="ladder-mode"]').forEach(r=>{
-            r.addEventListener('change',e=>{
-                if(e.target.value==='rank'){ ladderOptionsEl.style.display='none'; }
-                else{
-                    ladderOptionsEl.style.display='block';
-                    ladderOptionLabelEl.textContent=(e.target.value==='dud')?'꽝 개수':'당첨자 개수';
-                }
-            });
-        });
 
         function generateLadder(){
             const names=getDynamicInputValues('ladder-names-container');
@@ -465,21 +454,22 @@
             }
 
             ladderData={ names, results, paths:[], connections:[], revealed:new Set(), summary:[] };
+
             const width=ladderCanvas.width/(window.devicePixelRatio||1);
             const height=ladderCanvas.height/(window.devicePixelRatio||1);
             const num=names.length;
-            const rungs=Math.max(num,5);
             const yMargin=height*0.15;
             const ladderHeight=height*0.7;
 
             for(let i=0;i<num;i++) ladderData.connections.push({from:i,to:i});
 
-            for(let i=0;i<rungs*complexity;i++){
-                const y1=(ladderHeight/rungs)*(Math.floor(Math.random()*rungs))+yMargin;
-                const y2=y1+(Math.random()-0.5)*(ladderHeight/rungs);
+            // 복잡도에 따른 극명한 차이
+            const rungCount=(num*2)*complexity;
+            for(let i=0;i<rungCount;i++){
+                const y1=yMargin+Math.random()*ladderHeight;
                 const from=Math.floor(Math.random()*(num-1));
                 if(ladderData.paths.some(p=>Math.abs(p.y1-y1)<20 && (p.from===from || p.from===from-1))) continue;
-                ladderData.paths.push({y1,y2,from,to:from+1});
+                ladderData.paths.push({y1,y2:y1,from,to:from+1});
             }
 
             ladderData.connections.forEach(c=>c.to=c.from);
@@ -542,27 +532,31 @@
                 lCtx.fillText(ladderData.names[i],x,textPadding);
             }
 
-            // 하단 결과 (도착 인덱스 기준)
+            // 하단 결과
             lCtx.font="14px 'Press Start 2P'";
             lCtx.textAlign='center';
             for(let i=0;i<num;i++){
-                const x=spacing*(i+0.5);
-                const resultY=height-textPadding+10;
-
+                const x=spacing*(i+0.5), resultY=height-textPadding+10;
                 if(ladderData.revealed.has(i)){
-                    const text=ladderData.results[i];
                     lCtx.fillStyle=PURE_BLACK;
-                    lCtx.fillText(text,x,resultY);
+                    lCtx.fillText(ladderData.results[i],x,resultY);
                 }else{
                     lCtx.fillStyle=PURE_BLACK;
-                    const textWidth=lCtx.measureText('???').width;
-                    const boxW=textWidth+24, boxH=28;
-                    const boxX=x-boxW/2, boxY=resultY-boxH+5;
-                    lCtx.fillRect(boxX,boxY,boxW,boxH);
+                    const tw=lCtx.measureText('???').width;
+                    const boxW=tw+24, boxH=28;
+                    lCtx.fillRect(x-boxW/2,resultY-boxH+5,boxW,boxH);
                     lCtx.fillStyle=PURE_WHITE;
                     lCtx.fillText('???',x,resultY);
                 }
             }
+
+            // 반짝이 효과 그리기
+            sparkles.forEach(s=>{
+                lCtx.beginPath();
+                lCtx.fillStyle=COLORS.blue;
+                lCtx.arc(s.x,s.y,4,0,2*Math.PI);
+                lCtx.fill();
+            });
         }
 
         function tracePath(startIndex){
@@ -582,36 +576,38 @@
                 let next=null, nextIdx=-1, connectY=Infinity;
                 for(let i=0;i<rungs.length;i++){
                     const r=rungs[i];
-                    let startY;
-                    if(r.from===current) startY=r.y1;
-                    else if(r.to===current) startY=r.y2;
-                    else continue;
-                    if(startY>=currentY && startY<connectY){ connectY=startY; next=r; nextIdx=i; }
+                    if(r.from===current||r.to===current){
+                        const startY=r.y1;
+                        if(startY>=currentY && startY<connectY){ connectY=startY; next=r; nextIdx=i; }
+                    }
                 }
                 if(next){
                     points.push({x:spacing*(current+0.5), y:connectY});
                     current=(next.from===current)?next.to:next.from;
-                    const endY=(next.from===current)?next.y1:next.y2;
-                    points.push({x:spacing*(current+0.5), y:endY});
-                    currentY=endY; rungs.splice(nextIdx,1);
+                    points.push({x:spacing*(current+0.5), y:connectY});
+                    currentY=connectY; rungs.splice(nextIdx,1);
                 }else break;
             }
             points.push({x:spacing*(current+0.5), y:height-textPadding-15});
-            const resultIndex=current; // 도착 인덱스
+            const resultIndex=current;
 
             let start=null;
             function animate(t){
                 if(!start) start=t;
-                let prog=Math.min((t-start)/1333,1);
+                let prog=Math.min((t-start)/2000,1);
                 if(animationSkipped) prog=1;
 
+                const idx=Math.floor(prog*(points.length-1));
+                const x=points[idx].x, y=points[idx].y;
+                sparkles=[{x,y}];
                 drawLadder();
 
                 if(prog<1) requestAnimationFrame(animate);
                 else{
-                    ladderData.revealed.add(resultIndex); // 도착 인덱스 기준 공개
+                    ladderData.revealed.add(resultIndex);
                     ladderData.summary[startIndex]=`${ladderData.names[startIndex]}: ${ladderData.results[resultIndex]}`;
                     ladderResultBtn.style.display='inline-block';
+                    sparkles=[];
                     drawLadder();
                     tracing=false;
                     if(ladderData.revealed.size===ladderData.names.length){
@@ -654,7 +650,7 @@
             }
         });
 
-        /* ------------- 뽑기 ------------- */
+        /* ---------------- 뽑기 ---------------- */
         const generateEnvelopesBtn=document.getElementById('generate-envelopes-button');
         const envelopesContainer=document.getElementById('envelopes-container');
         const drawingStatusEl=document.getElementById('drawing-status');
