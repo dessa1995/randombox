@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+    <title>랜덤 게임 만들기</title>
+    <style>
+        /* --- 폰트 및 기본 스타일 --- */
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        :root{
+            --bg-color:#FDF6E3;
+            --primary-color:#657B83;
+            --accent-color:#D33682;
+            --font-color:#073642;
+            --highlight-blue:#268BD2;
+            --highlight-green:#859900;
+            --container-bg:rgba(255,255,255,.8);
+            --shadow-color:rgba(0,0,0,.15);
+        }
+        *{box-sizing:border-box;margin:0;padding:0}
+        html,body{
+            width:100%;height:100%;
+            background:var(--bg-color);
+            color:var(--font-color);
+            font-family:'Press Start 2P',cursive;
+            overflow:hidden;display:flex;justify-content:center;align-items:center;text-align:center;
+        }
+
+        /* --- 화면 관리 --- */
+        .screen{display:none;flex-direction:column;justify-content:center;align-items:center;width:100%;height:100%;padding:10px;animation:fadeIn .5s ease-in-out;position:absolute}
+        .screen.active{display:flex}
+        @keyframes fadeIn{from{opacity:0;transform:scale(.98)}to{opacity:1;transform:scale(1)}}
+        @keyframes title-glow{0%,100%{text-shadow:2px 2px 0 var(--highlight-blue)}50%{text-shadow:2px 2px 0 var(--accent-color)}}
+        @keyframes sparkle{0%{box-shadow:0 0 15px var(--highlight-blue)}50%{box-shadow:0 0 25px var(--accent-color)}100%{box-shadow:0 0 15px var(--highlight-blue)}}
+
+        /* --- 공통 컴포넌트 --- */
+        h1{font-size:clamp(1.5rem,5vw,2rem);color:var(--font-color);margin-bottom:20px;animation:title-glow 3s ease-in-out infinite}
+        .pixel-button{
+            font-family:'Press Start 2P',cursive;background:var(--primary-color);color:#fff;border:3px solid var(--font-color);
+            padding:10px 20px;font-size:clamp(.8rem,2.5vw,1rem);cursor:pointer;position:relative;box-shadow:4px 4px 0 var(--shadow-color);
+            transition:all .1s ease-out;margin:5px;-webkit-tap-highlight-color:transparent
+        }
+        .pixel-button:hover{transform:translate(1px,1px);box-shadow:3px 3px 0 var(--shadow-color)}
+        .pixel-button:active{transform:translate(2px,2px);box-shadow:2px 2px 0 var(--shadow-color)}
+        .pixel-button:disabled{background:#93A1A1;cursor:not-allowed;box-shadow:none;transform:none}
+
+        .game-container{
+            border:4px solid var(--font-color);padding:15px;width:95%;max-width:600px;background:var(--container-bg);
+            display:flex;flex-direction:column;align-items:center;max-height:95vh;overflow-y:auto;border-radius:8px
+        }
+        .input-group{margin:10px 0;width:100%}
+        label{display:block;margin-bottom:8px;font-size:.8rem}
+        input[type="text"],input[type="number"]{
+            font-family:'Press Start 2P',cursive;width:100%;padding:8px;background:#EEE8D5;border:2px solid var(--primary-color);color:var(--font-color);font-size:.7rem;border-radius:4px
+        }
+        input[type="range"]{-webkit-appearance:none;appearance:none;width:100%;height:10px;background:#EEE8D5;border:2px solid var(--primary-color);border-radius:5px;outline:none;opacity:.7;transition:opacity .2s}
+        input[type="range"]:hover{opacity:1}
+        input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:20px;height:20px;background:var(--highlight-blue);border:2px solid var(--font-color);cursor:pointer;border-radius:50%}
+        input[type="range"]::-moz-range-thumb{width:20px;height:20px;background:var(--highlight-blue);border:2px solid var(--font-color);cursor:pointer;border-radius:50%}
+
+        .dynamic-input-container{width:90%;max-height:150px;overflow-y:auto;padding-right:5px}
+        .input-row{display:flex;align-items:center;margin-bottom:8px}
+        .input-row input{flex-grow:1}
+        .remove-button,.add-input-button{
+            background:var(--accent-color);border:2px solid var(--font-color);color:#fff;font-family:'Press Start 2P',cursive;cursor:pointer;margin-left:10px;padding:5px 10px;font-size:.8rem;border-radius:4px
+        }
+        .add-input-button{background:var(--highlight-blue)}
+
+        /* --- 모달 --- */
+        .modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);justify-content:center;align-items:center;z-index:2000;padding:20px}
+        .modal-content{
+            background:var(--bg-color);border:4px solid var(--font-color);padding:20px;text-align:left;position:relative;max-width:600px;width:100%;
+            max-height:80vh;overflow-y:auto;font-size:.8rem;line-height:1.6
+        }
+        .modal-close-button{position:absolute;top:10px;right:15px;font-size:1.5rem;color:var(--font-color);cursor:pointer;background:none;border:none}
+        .modal-content h3,#result-modal-content h2{color:var(--highlight-blue);margin:10px 0;text-align:center}
+        .modal-content ul{list-style:square;padding-left:20px}
+
+        /* --- 게임별 스타일 --- */
+        .game-canvas{
+            background:#EEE8D5;border:2px solid var(--primary-color);box-shadow:3px 3px 8px var(--shadow-color);
+            max-width:100%;display:block;border-radius:8px;cursor:pointer
+        }
+        #roulette-result,#drawing-status,#ladder-status{margin-top:15px;font-size:1rem;color:var(--accent-color);min-height:25px}
+        .radio-group label{display:inline-block;margin:5px 10px;font-size:.8rem}
+        #ladder-options{display:none}
+
+        /* 뽑기 */
+        #envelopes-container{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin-top:15px;width:100%}
+        .envelope{
+            width:80px;height:60px;background:var(--highlight-blue);border:3px solid var(--font-color);border-radius:8px;cursor:pointer;display:flex;justify-content:center;align-items:center;
+            font-size:1.5rem;color:#fff;transition:transform .2s
+        }
+        .envelope:hover{transform:scale(1.1)}
+        .envelope.opened{background:var(--accent-color);cursor:not-allowed;font-size:.7rem;padding:5px;word-break:break-all}
+        .envelope.sparkle{animation:sparkle .5s 2}
+        #result-modal-body{font-size:1.2rem;line-height:1.8;text-align:center;text-shadow:1px 1px 2px var(--shadow-color)}
+
+        /* --- 사용 설명 버튼 --- */
+        #how-to-play-button{position:fixed;bottom:15px;right:15px;z-index:1000;width:45px;height:45px;border-radius:50%;font-size:1.2rem;padding:0;line-height:45px;text-align:center}
+    </style>
+</head>
+<body>
+    <!-- 메인 메뉴 -->
+    <div id="main-menu" class="screen active">
+        <h1>랜덤 게임 월드</h1>
+        <div>
+            <button class="pixel-button" data-screen="roulette-screen">룰렛</button>
+            <button class="pixel-button" data-screen="ladder-screen">사다리타기</button>
+            <button class="pixel-button" data-screen="drawing-screen">뽑기</button>
+        </div>
+    </div>
+
+    <!-- 룰렛 -->
+    <div id="roulette-screen" class="screen">
+        <div class="game-container">
+            <h1>룰렛</h1>
+            <canvas id="roulette-canvas" class="game-canvas"></canvas>
+            <div id="roulette-result"></div>
+            <div class="input-group">
+                <label>항목</label>
+                <div id="roulette-items-container" class="dynamic-input-container"></div>
+                <button class="pixel-button add-input-button" data-container="roulette-items-container">+</button>
+            </div>
+            <div class="input-group">
+                <label for="roulette-speed">회전 속도</label>
+                <input type="range" id="roulette-speed" min="1" max="10" value="5">
+            </div>
+            <button class="pixel-button" id="generate-roulette-button">룰렛 생성</button>
+            <button class="pixel-button" id="spin-button" style="display:none;">돌리기!</button>
+            <button class="pixel-button back-button">뒤로가기</button>
+        </div>
+    </div>
+
+    <!-- 사다리 -->
+    <div id="ladder-screen" class="screen">
+        <div class="game-container">
+            <h1>사다리타기</h1>
+            <canvas id="ladder-canvas" class="game-canvas"></canvas>
+            <div id="ladder-status"></div>
+            <div class="input-group">
+                <label>이름</label>
+                <div id="ladder-names-container" class="dynamic-input-container"></div>
+                <button class="pixel-button add-input-button" data-container="ladder-names-container">+</button>
+            </div>
+            <div class="input-group radio-group">
+                <label><input type="radio" name="ladder-mode" value="rank" checked> 순위 정하기</label>
+                <label><input type="radio" name="ladder-mode" value="dud"> 꽝 찾기</label>
+                <label><input type="radio" name="ladder-mode" value="winner"> 당첨자 찾기</label>
+            </div>
+            <div id="ladder-options" class="input-group">
+                <label for="ladder-option-count" id="ladder-option-label">꽝 개수</label>
+                <input type="number" id="ladder-option-count" value="1" min="1">
+            </div>
+            <div class="input-group">
+                <label for="ladder-complexity">사다리 복잡도: <span id="ladder-complexity-value">3</span> (1-5)</label>
+                <input type="range" id="ladder-complexity" min="1" max="5" value="3">
+            </div>
+            <button class="pixel-button" id="ladder-generate-button">사다리 생성</button>
+            <button class="pixel-button" id="ladder-result-button" style="display:none;">결과 보기</button>
+            <button class="pixel-button back-button">뒤로가기</button>
+        </div>
+    </div>
+
+    <!-- 뽑기 -->
+    <div id="drawing-screen" class="screen">
+        <div class="game-container">
+            <h1>뽑기</h1>
+            <div id="drawing-status"></div>
+            <div id="envelopes-container"></div>
+            <div class="input-group">
+                <label>참가자</label>
+                <div id="drawing-participants-container" class="dynamic-input-container"></div>
+                <button class="pixel-button add-input-button" data-container="drawing-participants-container">+</button>
+            </div>
+            <div class="input-group">
+                <label for="drawing-count">뽑을 갯수</label>
+                <input type="number" id="drawing-count" value="1" min="1">
+            </div>
+            <div class="input-group radio-group">
+                <label><input type="checkbox" id="allow-duplicates"> 중복 뽑기 허용</label>
+            </div>
+            <button class="pixel-button" id="generate-envelopes-button">뽑기판 생성!</button>
+            <button class="pixel-button" id="drawing-result-button" style="display:none;">결과 보기</button>
+            <button class="pixel-button back-button">뒤로가기</button>
+        </div>
+    </div>
+
+    <!-- 사용 설명 모달 -->
+    <button id="how-to-play-button" class="pixel-button">?</button>
+    <div id="how-to-play-modal" class="modal-overlay">
+        <div id="modal-content" class="modal-content">
+            <button id="modal-close" class="modal-close-button">X</button>
+            <h2>사용 설명</h2>
+            <h3>룰렛</h3>
+            <ul>
+                <li>'+' 버튼으로 항목을 추가하고 '룰렛 생성' 버튼을 누르세요.</li>
+                <li>'돌리기!' 버튼으로 룰렛을 실행합니다.</li>
+                <li>애니메이션 중 화면을 클릭하면 즉시 결과가 나옵니다.</li>
+            </ul>
+            <h3>사다리타기</h3>
+            <ul>
+                <li>'+' 버튼으로 이름을 추가하고 '사다리 생성' 버튼을 누르세요.</li>
+                <li>복잡도를 조절하여 가로줄의 수를 변경할 수 있습니다.</li>
+                <li>상단 이름을 클릭하면 한 명씩 결과 확인이 가능합니다.</li>
+                <li>'결과 보기' 버튼으로 모든 결과를 한 번에 확인할 수 있습니다.</li>
+            </ul>
+            <h3>뽑기</h3>
+            <ul>
+                <li>참가자와 뽑을 갯수 등을 설정하고 '뽑기판 생성'을 누르세요.</li>
+                <li>생성된 봉투를 클릭하여 결과를 확인하세요.</li>
+            </ul>
+            <h3>결과 캡처하기</h3>
+            <ul>
+                <li><strong>Windows:</strong> Win + Shift + S</li>
+                <li><strong>macOS:</strong> Cmd + Shift + 4</li>
+                <li><strong>Android:</strong> 볼륨 아래 + 전원 버튼</li>
+                <li><strong>iOS:</strong> 측면 + 볼륨 위 버튼</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- 결과 요약 모달 -->
+    <div id="result-modal" class="modal-overlay">
+        <div id="result-modal-content" class="modal-content">
+            <button id="result-modal-close" class="modal-close-button">X</button>
+            <h2 id="result-modal-title">게임 결과</h2>
+            <div id="result-modal-body"></div>
+        </div>
+    </div>
+
+    <script>
+        /* ---------- 캔버스에서 쓸 색: CSS 변수 → 실제 색값으로 고정 ---------- */
+        const CSS = getComputedStyle(document.documentElement);
+        const COLORS = {
+            font: (CSS.getPropertyValue('--font-color')||'#073642').trim(),
+            primary: (CSS.getPropertyValue('--primary-color')||'#657B83').trim(),
+            accent: (CSS.getPropertyValue('--accent-color')||'#D33682').trim(),
+            blue: (CSS.getPropertyValue('--highlight-blue')||'#268BD2').trim()
+        };
+        const PURE_BLACK = '#000000';
+        const PURE_WHITE = '#ffffff';
+
+        const ROULETTE_COLORS = ["#268BD2","#D33682","#859900","#2AA198","#B58900","#CB4B16","#6C71C4"];
+
+        /* --- 전역 및 공통 --- */
+        const screens=document.querySelectorAll('.screen');
+        const backButtons=document.querySelectorAll('.back-button');
+        const howToPlayModal=document.getElementById('how-to-play-modal');
+        const resultModal=document.getElementById('result-modal');
+        const howToPlayButton=document.getElementById('how-to-play-button');
+
+        function createDynamicInputs(containerId, initialCount=2){
+            const container=document.getElementById(containerId);
+            container.innerHTML='';
+            for(let i=0;i<initialCount;i++) addInputRow(container,`항목 ${i+1}`);
+        }
+        function addInputRow(container, placeholder=''){
+            const row=document.createElement('div');
+            row.className='input-row';
+            row.innerHTML=`<input type="text" placeholder="${placeholder}" value=""><button class="remove-button">-</button>`;
+            container.appendChild(row);
+        }
+        document.body.addEventListener('click',e=>{
+            if(e.target.classList.contains('add-input-button')){
+                const container=document.getElementById(e.target.dataset.container);
+                addInputRow(container,`항목 ${container.children.length+1}`);
+            }
+            if(e.target.classList.contains('remove-button')){
+                const row=e.target.parentElement;
+                if(row.parentElement.children.length>2) row.remove();
+                else showResultModal('오류','항목은 최소 2개 이상이어야 합니다.');
+            }
+        });
+
+        function showScreen(id){
+            screens.forEach(s=>s.classList.remove('active'));
+            const el=document.getElementById(id);
+            if(el){
+                el.classList.add('active');
+                if(id==='roulette-screen') initRoulette();
+                if(id==='ladder-screen') initLadder();
+                if(id==='drawing-screen') initDrawing();
+            }
+            resizeCanvases();
+        }
+        document.getElementById('main-menu').addEventListener('click',e=>{
+            if(e.target.matches('.pixel-button[data-screen]')) showScreen(e.target.dataset.screen);
+        });
+        backButtons.forEach(btn=>btn.addEventListener('click',()=>showScreen('main-menu')));
+
+        function setupModal(modal, openBtn, closeBtnSelector){
+            const closeBtn=modal.querySelector(closeBtnSelector);
+            if(openBtn) openBtn.addEventListener('click',()=>modal.style.display='flex');
+            closeBtn.addEventListener('click',()=>modal.style.display='none');
+            modal.addEventListener('click',e=>{ if(e.target===modal) modal.style.display='none'; });
+        }
+        setupModal(howToPlayModal,howToPlayButton,'#modal-close');
+        setupModal(resultModal,null,'#result-modal-close');
+
+        function showResultModal(title,results){
+            document.getElementById('result-modal-title').textContent=title;
+            const body=document.getElementById('result-modal-body');
+            body.innerHTML=Array.isArray(results)?results.join('<br>'):results;
+            resultModal.style.display='flex';
+        }
+
+        function getDynamicInputValues(containerId){
+            const container=document.getElementById(containerId);
+            return Array.from(container.querySelectorAll('input[type="text"]'))
+                .map(i=>i.value.trim()||i.placeholder.trim())
+                .filter(v=>v!=='');
+        }
+
+        /* ------------- 룰렛 ------------- */
+        const rouletteCanvas=document.getElementById('roulette-canvas');
+        const rCtx=rouletteCanvas.getContext('2d');
+        const generateRouletteButton=document.getElementById('generate-roulette-button');
+        const spinButton=document.getElementById('spin-button');
+        const rouletteResultEl=document.getElementById('roulette-result');
+        const rouletteSpeedSlider=document.getElementById('roulette-speed');
+        let rouletteAngle=0, rouletteSpinning=false, rouletteItems=[], rouletteSkip=false;
+
+        function drawRoulette(){
+            const n=rouletteItems.length;
+            const dpr=window.devicePixelRatio||1;
+            const cx=rouletteCanvas.width/dpr/2, cy=rouletteCanvas.height/dpr/2;
+            rCtx.clearRect(0,0,rouletteCanvas.width,rouletteCanvas.height);
+
+            rCtx.font="12px 'Press Start 2P'";
+            rCtx.textAlign='center';
+            rCtx.fillStyle=COLORS.font;
+
+            if(n<2){
+                rCtx.fillText("항목 입력 후 생성",cx,cy-10);
+                rCtx.fillText("버튼을 누르세요",cx,cy+15);
+                return;
+            }
+
+            const arc=2*Math.PI/n;
+            const radius=Math.min(cx,cy)*0.9;
+
+            for(let i=0;i<n;i++){
+                const ang=rouletteAngle+i*arc;
+                rCtx.beginPath();
+                rCtx.fillStyle=ROULETTE_COLORS[i%ROULETTE_COLORS.length];
+                rCtx.moveTo(cx,cy);
+                rCtx.arc(cx,cy,radius,ang,ang+arc);
+                rCtx.closePath();
+                rCtx.fill();
+
+                rCtx.save();
+                rCtx.fillStyle=PURE_WHITE;
+                rCtx.translate(cx+Math.cos(ang+arc/2)*radius*0.6, cy+Math.sin(ang+arc/2)*radius*0.6);
+                rCtx.rotate(ang+arc/2+Math.PI/2);
+                const text=rouletteItems[i].length>7?rouletteItems[i].substring(0,6)+'...':rouletteItems[i];
+                rCtx.fillText(text,0,0);
+                rCtx.restore();
+            }
+
+            // 포인터
+            rCtx.fillStyle=COLORS.font;
+            rCtx.beginPath();
+            rCtx.moveTo(cx+radius-5,cy);
+            rCtx.lineTo(cx+radius+15,cy-10);
+            rCtx.lineTo(cx+radius+15,cy+10);
+            rCtx.closePath();
+            rCtx.fill();
+        }
+
+        function generateRoulette(){
+            rouletteItems=getDynamicInputValues('roulette-items-container');
+            if(rouletteItems.length<2){ showResultModal('오류','항목을 2개 이상 입력해주세요.'); return; }
+            rouletteAngle=0; drawRoulette();
+            spinButton.style.display='inline-block';
+            generateRouletteButton.textContent='재생성';
+            rouletteResultEl.textContent='';
+        }
+        function skipRouletteAnimation(){ rouletteSkip=true; }
+        function spinAnimation(){
+            if(rouletteSpinning) return;
+            rouletteSpinning=true; rouletteSkip=false;
+            rouletteResultEl.textContent='...';
+            spinButton.disabled=true; generateRouletteButton.disabled=true;
+            rouletteCanvas.addEventListener('click',skipRouletteAnimation);
+
+            const speed=rouletteSpeedSlider.value;
+            const spinAngleTotal=Math.random()*10+10*speed;
+            let start=null;
+
+            function animate(ts){
+                if(!start) start=ts;
+                const progress=ts-start, duration=3000;
+                const easeOut=1-Math.pow(1-Math.min(progress/duration,1),3);
+                rouletteAngle=(spinAngleTotal*easeOut)%(2*Math.PI);
+                drawRoulette();
+
+                if(progress<duration && !rouletteSkip) requestAnimationFrame(animate);
+                else{
+                    rouletteCanvas.removeEventListener('click',skipRouletteAnimation);
+                    rouletteSpinning=false;
+                    const finalAngle=rouletteSkip?(spinAngleTotal%(2*Math.PI)):rouletteAngle;
+                    const arc=2*Math.PI/rouletteItems.length;
+                    const idx=Math.floor(((2*Math.PI-finalAngle+Math.PI/2)%(2*Math.PI))/arc);
+                    const item=rouletteItems[idx];
+                    rouletteResultEl.textContent=`결과: ${item}`;
+                    spinButton.disabled=false; generateRouletteButton.disabled=false;
+                    showResultModal('룰렛 결과',`🎉 ${item} 🎉`);
+                }
+            }
+            requestAnimationFrame(animate);
+        }
+        function initRoulette(){
+            createDynamicInputs('roulette-items-container');
+            rouletteItems=[]; drawRoulette();
+            spinButton.style.display='none';
+            generateRouletteButton.textContent='룰렛 생성';
+            rouletteResultEl.textContent='';
+        }
+        generateRouletteButton.addEventListener('click',generateRoulette);
+        spinButton.addEventListener('click',spinAnimation);
+
+        /* ------------- 사다리 ------------- */
+        const ladderCanvas=document.getElementById('ladder-canvas');
+        const lCtx=ladderCanvas.getContext('2d');
+        const ladderGenerateBtn=document.getElementById('ladder-generate-button');
+        const ladderResultBtn=document.getElementById('ladder-result-button');
+        const ladderOptionsEl=document.getElementById('ladder-options');
+        const ladderOptionLabelEl=document.getElementById('ladder-option-label');
+        const ladderOptionCountEl=document.getElementById('ladder-option-count');
+        const ladderStatusEl=document.getElementById('ladder-status');
+        const ladderComplexitySlider=document.getElementById('ladder-complexity');
+        const ladderComplexityValue=document.getElementById('ladder-complexity-value');
+
+        let ladderData={}, animationSkipped=false, tracing=false, sparkles=[];
+
+        ladderComplexitySlider.addEventListener('input',e=>{ ladderComplexityValue.textContent=e.target.value; });
+        document.querySelectorAll('input[name="ladder-mode"]').forEach(r=>{
+            r.addEventListener('change',e=>{
+                if(e.target.value==='rank'){ ladderOptionsEl.style.display='none'; }
+                else{
+                    ladderOptionsEl.style.display='block';
+                    ladderOptionLabelEl.textContent=(e.target.value==='dud')?'꽝 개수':'당첨자 개수';
+                }
+            });
+        });
+
+        function generateLadder(){
+            const names=getDynamicInputValues('ladder-names-container');
+            const mode=document.querySelector('input[name="ladder-mode"]:checked').value;
+            const count=parseInt(ladderOptionCountEl.value);
+            const complexity=parseInt(ladderComplexitySlider.value);
+
+            if(names.length<2){ showResultModal('오류','이름을 2개 이상 입력해주세요.'); return; }
+            if((mode==='dud'||mode==='winner') && (count>=names.length || count<1)){
+                showResultModal('오류','꽝/당첨자 수는 1개 이상, 전체 이름 수보다 적어야 합니다.'); return;
+            }
+
+            let results=[];
+            if(mode==='rank'){ for(let i=1;i<=names.length;i++) results.push(`${i}등`); }
+            else{
+                const main=(mode==='dud')?'꽝':'당첨';
+                const sub =(mode==='dud')?'통과':'꽝';
+                for(let i=0;i<names.length;i++) results.push(i<count?main:sub);
+                results.sort(()=>Math.random()-0.5);
+            }
+
+            ladderData={ names, results, paths:[], connections:[], revealed:new Set(), summary:[] };
+            const width=ladderCanvas.width/(window.devicePixelRatio||1);
+            const height=ladderCanvas.height/(window.devicePixelRatio||1);
+            const num=names.length;
+            const rungs=Math.max(num,5);
+            const yMargin=height*0.15;
+            const ladderHeight=height*0.7;
+
+            for(let i=0;i<num;i++) ladderData.connections.push({from:i,to:i});
+
+            for(let i=0;i<rungs*complexity;i++){
+                const y1=(ladderHeight/rungs)*(Math.floor(Math.random()*rungs))+yMargin;
+                const y2=y1+(Math.random()-0.5)*(ladderHeight/rungs);
+                const from=Math.floor(Math.random()*(num-1));
+                if(ladderData.paths.some(p=>Math.abs(p.y1-y1)<20 && (p.from===from || p.from===from-1))) continue;
+                ladderData.paths.push({y1,y2,from,to:from+1});
+            }
+
+            ladderData.connections.forEach(c=>c.to=c.from);
+            [...ladderData.paths].sort((a,b)=>a.y1-b.y1).forEach(p=>{
+                const c1=ladderData.connections.find(c=>c.to===p.from);
+                const c2=ladderData.connections.find(c=>c.to===p.to);
+                [c1.to,c2.to]=[c2.to,c1.to];
+            });
+
+            drawLadder();
+            ladderStatusEl.textContent='이름을 클릭해서 결과를 확인하세요!';
+            ladderResultBtn.style.display='inline-block';
+            ladderCanvas.style.cursor='pointer';
+        }
+
+        function drawLadder(){
+            const dpr=window.devicePixelRatio||1;
+            const width=ladderCanvas.width/dpr;
+            const height=ladderCanvas.height/dpr;
+
+            lCtx.clearRect(0,0,ladderCanvas.width,ladderCanvas.height);
+
+            // 안내 문구
+            if(!ladderData.names || ladderData.names.length<2){
+                lCtx.save();
+                lCtx.font="12px 'Press Start 2P'";
+                lCtx.textAlign='center';
+                lCtx.fillStyle=COLORS.font;
+                lCtx.fillText("이름 입력 후 생성",width/2,height/2-10);
+                lCtx.fillText("버튼을 누르세요",width/2,height/2+15);
+                lCtx.restore();
+                return;
+            }
+
+            const num=ladderData.names.length;
+            const spacing=width/num;
+            const textPadding=25;
+
+            // 1) 선 그리기
+            lCtx.lineWidth=4;
+            lCtx.strokeStyle=COLORS.primary;
+            for(let i=0;i<num;i++){
+                const x=spacing*(i+0.5);
+                lCtx.beginPath();
+                lCtx.moveTo(x,textPadding+15);
+                lCtx.lineTo(x,height-textPadding-15);
+                lCtx.stroke();
+            }
+            ladderData.paths.forEach(p=>{
+                const x1=spacing*(p.from+0.5), x2=spacing*(p.to+0.5);
+                lCtx.beginPath();
+                lCtx.moveTo(x1,p.y1); lCtx.lineTo(x2,p.y2); lCtx.stroke();
+            });
+
+            // 2) 상단 이름 = 항상 검정 텍스트
+            lCtx.font="14px 'Press Start 2P'";
+            lCtx.textAlign='center';
+            lCtx.fillStyle=PURE_BLACK;
+            for(let i=0;i<num;i++){
+                const x=spacing*(i+0.5);
+                lCtx.fillText(ladderData.names[i],x,textPadding);
+            }
+
+            // 3) 하단 (미공개: 검정 박스 + 흰색 '???', 공개: 검정 텍스트만)
+            lCtx.font="14px 'Press Start 2P'";
+            lCtx.textAlign='center';
+            for(let i=0;i<num;i++){
+                const x=spacing*(i+0.5);
+                const resultY=height-textPadding+10;
+
+                if(ladderData.revealed.has(i)){
+                    const resultIndex=ladderData.connections[i].to;
+                    const text=ladderData.results[resultIndex];
+                    lCtx.fillStyle=PURE_BLACK;
+                    lCtx.fillText(text,x,resultY);
+                }else{
+                    lCtx.fillStyle=PURE_BLACK;
+                    const textWidth=lCtx.measureText('???').width;
+                    const boxW=textWidth+24, boxH=28;
+                    const boxX=x-boxW/2, boxY=resultY-boxH+5;
+                    lCtx.fillRect(boxX,boxY,boxW,boxH);
+                    lCtx.fillStyle=PURE_WHITE;
+                    lCtx.fillText('???',x,resultY);
+                }
+            }
+        }
+
+        function tracePath(startIndex){
+            if(tracing || ladderData.revealed.has(startIndex)) return;
+            tracing=true; animationSkipped=false; sparkles=[];
+
+            const dpr=window.devicePixelRatio||1;
+            const width=ladderCanvas.width/dpr, height=ladderCanvas.height/dpr;
+            const num=ladderData.names.length;
+            const spacing=width/num, textPadding=25;
+
+            let current=startIndex, currentY=textPadding+15;
+            const points=[{x:spacing*(current+0.5), y:currentY}];
+            const rungs=[...ladderData.paths.map(p=>({...p}))];
+
+            while(true){
+                let next=null, nextIdx=-1, connectY=Infinity;
+                for(let i=0;i<rungs.length;i++){
+                    const r=rungs[i];
+                    let startY;
+                    if(r.from===current) startY=r.y1;
+                    else if(r.to===current) startY=r.y2;
+                    else continue;
+                    if(startY>=currentY && startY<connectY){ connectY=startY; next=r; nextIdx=i; }
+                }
+                if(next){
+                    points.push({x:spacing*(current+0.5), y:connectY});
+                    current=(next.from===current)?next.to:next.from;
+                    const endY=(next.from===current)?next.y1:next.y2;
+                    points.push({x:spacing*(current+0.5), y:endY});
+                    currentY=endY; rungs.splice(nextIdx,1);
+                }else break;
+            }
+            points.push({x:spacing*(current+0.5), y:height-textPadding-15});
+
+            let start=null;
+            function animate(t){
+                if(!start) start=t;
+                let prog=Math.min((t-start)/1333,1);
+                if(animationSkipped) prog=1;
+
+                const total=points.reduce((acc,p,i)=>i?acc+Math.hypot(p.x-points[i-1].x,p.y-points[i-1].y):0,0);
+                let travel=prog*total, gone=0, pos=points[0];
+                for(let i=1;i<points.length;i++){
+                    const seg=Math.hypot(points[i].x-points[i-1].x, points[i].y-points[i-1].y);
+                    if(gone+seg>=travel){
+                        const r=(travel-gone)/seg;
+                        pos={ x:points[i-1].x+(points[i].x-points[i-1].x)*r,
+                              y:points[i-1].y+(points[i].y-points[i-1].y)*r };
+                        break;
+                    }
+                    gone+=seg; if(i===points.length-1) pos=points[i];
+                }
+
+                for(let i=0;i<5;i++){
+                    sparkles.push({ x:pos.x, y:pos.y, size:Math.random()*3+2, life:1, vx:Math.random()*2-1, vy:Math.random()*2-1 });
+                }
+
+                drawLadder();
+
+                // 파티클
+                lCtx.save();
+                for(let i=sparkles.length-1;i>=0;i--){
+                    const s=sparkles[i]; s.x+=s.vx; s.y+=s.vy; s.life-=0.05;
+                    if(s.life<=0) sparkles.splice(i,1);
+                    else{
+                        lCtx.beginPath(); lCtx.arc(s.x,s.y,s.size,0,Math.PI*2);
+                        lCtx.fillStyle=`rgba(38,139,210,${s.life})`; lCtx.fill();
+                    }
+                }
+                lCtx.restore();
+
+                if(prog<1) requestAnimationFrame(animate);
+                else{
+                    ladderData.revealed.add(startIndex);
+                    const resultIndex=ladderData.connections[startIndex].to;
+                    ladderData.summary[startIndex]=`${ladderData.names[startIndex]}: ${ladderData.results[resultIndex]}`;
+                    ladderResultBtn.style.display='inline-block';
+                    drawLadder();
+                    tracing=false;
+                    if(ladderData.revealed.size===ladderData.names.length){
+                        ladderStatusEl.textContent='모든 결과를 확인했습니다!';
+                        showResultModal('사다리타기 전체 결과',ladderData.summary.filter(Boolean));
+                    }
+                }
+            }
+            requestAnimationFrame(animate);
+        }
+
+        function initLadder(){
+            createDynamicInputs('ladder-names-container',3);
+            ladderData={}; drawLadder();
+            ladderStatusEl.textContent=''; ladderResultBtn.style.display='none';
+        }
+        document.getElementById('ladder-generate-button').addEventListener('click',generateLadder);
+        ladderResultBtn.addEventListener('click',()=>{
+            if(!ladderData.names || tracing) return;
+            for(let i=0;i<ladderData.names.length;i++){
+                if(!ladderData.revealed.has(i)){
+                    ladderData.revealed.add(i);
+                    const resultIndex=ladderData.connections[i].to;
+                    ladderData.summary[i]=`${ladderData.names[i]}: ${ladderData.results[resultIndex]}`;
+                }
+            }
+            drawLadder();
+            showResultModal('사다리타기 전체 결과',ladderData.summary.filter(Boolean));
+            ladderStatusEl.textContent='전체 결과 확인 완료!';
+            ladderCanvas.style.cursor='default';
+        });
+
+        ladderCanvas.addEventListener('click',e=>{
+            if(!ladderData.names || (ladderData.revealed && ladderData.revealed.size===ladderData.names.length)) return;
+            if(tracing){ animationSkipped=true; return; }
+            const rect=ladderCanvas.getBoundingClientRect();
+            const x=e.clientX-rect.left, y=e.clientY-rect.top;
+            const num=ladderData.names.length;
+            const spacing=ladderCanvas.clientWidth/num;
+            if(y<60){ // 상단 이름 대략 영역
+                const idx=Math.floor(x/spacing);
+                if(idx>=0 && idx<num) tracePath(idx);
+            }
+        });
+
+        /* ------------- 뽑기 ------------- */
+        const generateEnvelopesBtn=document.getElementById('generate-envelopes-button');
+        const envelopesContainer=document.getElementById('envelopes-container');
+        const drawingStatusEl=document.getElementById('drawing-status');
+        const drawingResultBtn=document.getElementById('drawing-result-button');
+        let drawingState={}, drawCount=1;
+
+        function initDrawing(){
+            createDynamicInputs('drawing-participants-container');
+            envelopesContainer.innerHTML='';
+            drawingStatusEl.textContent='참가자를 입력하고 뽑기판을 생성하세요.';
+            drawingResultBtn.style.display='none';
+        }
+
+        generateEnvelopesBtn.addEventListener('click',()=>{
+            const participants=getDynamicInputValues('drawing-participants-container');
+            const totalDraws=parseInt(document.getElementById('drawing-count').value);
+            const allowDuplicates=document.getElementById('allow-duplicates').checked;
+
+            if(participants.length<2 || totalDraws<1){ showResultModal('오류','참가자는 2명 이상, 뽑을 갯수는 1개 이상이어야 합니다.'); return; }
+            if(!allowDuplicates && totalDraws>participants.length){ showResultModal('오류','중복 뽑기 비허용 시, 뽑을 갯수는 참가자 수보다 많을 수 없습니다.'); return; }
+
+            drawingState={ participants:[...participants], available:[...participants], totalDraws, allowDuplicates, drawsLeft:totalDraws, summary:[] };
+            drawCount=1;
+
+            envelopesContainer.innerHTML='';
+            participants.forEach(()=>{
+                const env=document.createElement('div');
+                env.className='envelope'; env.textContent='?';
+                envelopesContainer.appendChild(env);
+            });
+            drawingStatusEl.textContent=`봉투를 클릭하세요! (남은 횟수: ${drawingState.drawsLeft})`;
+            drawingResultBtn.style.display='none';
+        });
+
+        envelopesContainer.addEventListener('click',e=>{
+            const env=e.target.closest('.envelope');
+            if(!env || env.classList.contains('opened') || env.classList.contains('is-opening')) return;
+            if(drawingState.drawsLeft<=0){ showResultModal('안내','모든 뽑기를 완료했습니다.'); return; }
+
+            env.classList.add('sparkle','is-opening');
+            setTimeout(()=>{
+                env.classList.remove('sparkle');
+                if(drawingState.available.length===0 && !drawingState.allowDuplicates) return;
+
+                const idx=Math.floor(Math.random()*drawingState.available.length);
+                const winner=drawingState.available[idx];
+                env.textContent=winner; env.classList.add('opened');
+
+                drawingState.summary.push(`${drawCount}회차: ${winner}`); drawCount++;
+                drawingResultBtn.style.display='inline-block';
+
+                if(drawingState.allowDuplicates){
+                    setTimeout(()=>{
+                        envelopesContainer.querySelectorAll('.envelope').forEach(el=>{
+                            el.textContent='?'; el.classList.remove('opened','is-opening');
+                        });
+                    },1500);
+                }else{
+                    drawingState.available.splice(idx,1);
+                }
+
+                drawingState.drawsLeft--;
+                drawingStatusEl.textContent=`남은 횟수: ${drawingState.drawsLeft}`;
+                if(drawingState.drawsLeft===0){
+                    drawingStatusEl.textContent='뽑기 완료!';
+                    setTimeout(()=>showResultModal('뽑기 결과',drawingState.summary),500);
+                }
+            },1000);
+        });
+        drawingResultBtn.addEventListener('click',()=>{ if(drawingState.summary) showResultModal('뽑기 결과',drawingState.summary); });
+
+        /* --- 리사이즈 & 초기화 --- */
+        function resizeCanvases(){
+            const canvases=document.querySelectorAll('.game-canvas');
+            canvases.forEach(canvas=>{
+                const container=canvas.parentElement;
+                const style=getComputedStyle(container);
+                const containerWidth=container.clientWidth-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight);
+                const dpr=window.devicePixelRatio||1;
+                const aspect=canvas.id==='ladder-canvas'?0.75:1;
+
+                canvas.style.width=containerWidth+'px';
+                canvas.style.height=(containerWidth*aspect)+'px';
+                canvas.width=Math.floor(containerWidth*dpr);
+                canvas.height=Math.floor(containerWidth*aspect*dpr);
+                const ctx=canvas.getContext('2d');
+                ctx.setTransform(dpr,0,0,dpr,0,0); // 스케일 재설정(중첩 방지)
+            });
+            if(document.getElementById('roulette-screen').classList.contains('active')) drawRoulette();
+            if(document.getElementById('ladder-screen').classList.contains('active')) drawLadder();
+        }
+        window.addEventListener('resize',resizeCanvases);
+        document.addEventListener('DOMContentLoaded',()=>{ showScreen('main-menu'); });
+    </script>
+</body>
+</html>
