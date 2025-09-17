@@ -87,7 +87,7 @@
         #ladder-options{display:none}
 
         /* 뽑기 */
-        #envelopes-container{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin-top:15px;width:100%}
+        #envelopes-container{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin-top:15px;width:100%;cursor:pointer;}
         .envelope{
             width:80px;height:60px;background:var(--highlight-blue);border:3px solid var(--font-color);border-radius:8px;cursor:pointer;display:flex;justify-content:center;align-items:center;
             font-size:1.5rem;color:#fff;transition:transform .2s
@@ -234,12 +234,14 @@
             <ul>
                 <li>참가자와 뽑을 갯수 등을 설정하고 '뽑기판 생성'을 누르세요.</li>
                 <li>생성된 봉투를 클릭하여 결과를 확인하세요.</li>
+                <li>애니메이션 중 화면을 클릭하면 즉시 결과가 나옵니다.</li>
             </ul>
             <h3>랜덤 숫자 뽑기</h3>
             <ul>
                 <li>'범위로 입력' 또는 '직접 입력'을 선택하고 숫자를 입력하세요.</li>
                 <li>'숫자판 생성' 버튼을 눌러 공을 생성합니다.</li>
                 <li>'뽑기!' 버튼을 누르면 애니메이션 후 숫자가 추첨됩니다.</li>
+                <li>애니메이션 중 화면을 클릭하면 즉시 결과가 나옵니다.</li>
             </ul>
             <h3>결과 캡처하기</h3>
             <ul>
@@ -390,6 +392,7 @@
                 rCtx.restore();
             }
 
+            // 화살표(포인터) 그리기
             rCtx.fillStyle=COLORS.font;
             rCtx.beginPath();
             rCtx.moveTo(cx+radius-5,cy);
@@ -422,16 +425,28 @@
                 if(!start) start=ts;
                 const progress=ts-start, duration=3000;
                 const easeOut=1-Math.pow(1-Math.min(progress/duration,1),3);
-                rouletteAngle=(spinAngleTotal*easeOut)%(2*Math.PI);
+                rouletteAngle = spinAngleTotal * easeOut;
                 drawRoulette();
 
                 if(progress<duration && !rouletteSkip) requestAnimationFrame(animate);
                 else{
                     rouletteSpinning=false;
-                    const finalAngle=rouletteSkip?(spinAngleTotal%(2*Math.PI)):rouletteAngle;
-                    const arc=2*Math.PI/rouletteItems.length;
-                    const idx=Math.floor(((2*Math.PI-finalAngle+Math.PI/2)%(2*Math.PI))/arc);
-                    const item=rouletteItems[idx];
+                    // [FIX] 최종 각도를 전체 회전량 기준으로 계산하여 정확성 확보
+                    const finalAngle = rouletteAngle % (2 * Math.PI);
+                    
+                    // [FIX] 스킵 시 룰렛을 최종 위치로 즉시 이동 및 다시 그리기
+                    if (rouletteSkip) {
+                        rouletteAngle = finalAngle;
+                        drawRoulette();
+                    }
+
+                    const arc = 2 * Math.PI / rouletteItems.length;
+                    // [FIX] 결과 계산 로직 수정: 화살표는 0도(3시 방향)에 고정되어 있으므로,
+                    // 현재 0도 위치에 있는 룰렛 조각이 어떤 것인지 계산
+                    const winningAngle = (2 * Math.PI - (finalAngle % (2 * Math.PI))) % (2 * Math.PI);
+                    const idx = Math.floor(winningAngle / arc);
+
+                    const item = rouletteItems[idx];
                     rouletteResultEl.textContent=`결과: ${item}`;
                     spinButton.disabled=false; generateRouletteButton.disabled=false;
                     showResultModal('룰렛 결과',`🎉 ${item} 🎉`);
@@ -448,6 +463,13 @@
         }
         generateRouletteButton.addEventListener('click',generateRoulette);
         spinButton.addEventListener('click',spinAnimation);
+        // [NEW] 룰렛 애니메이션 스킵 기능
+        rouletteCanvas.addEventListener('click', () => {
+            if (rouletteSpinning && !rouletteSkip) {
+                rouletteSkip = true;
+            }
+        });
+
 
         /* ---------------- 사다리 ---------------- */
         const ladderCanvas=document.getElementById('ladder-canvas');
@@ -495,13 +517,11 @@
 
             for(let i=0;i<num;i++) ladderData.connections.push({from:i,to:i});
 
-            // --- 사다리 생성 로직 개선 ---
             const rungPositions = new Set();
             const minVGap = 25;
 
-            // 1. 모든 세로줄이 연결되도록 최소한의 가로줄 생성
             const backbone = Array.from({length: num - 1}, (_, i) => i);
-            for (let i = backbone.length - 1; i > 0; i--) { // Shuffle
+            for (let i = backbone.length - 1; i > 0; i--) {
                 const j = Math.floor(Math.random() * (i + 1));
                 [backbone[i], backbone[j]] = [backbone[j], backbone[i]];
             }
@@ -509,34 +529,32 @@
             backbone.forEach(from => {
                  let y1, attempts = 0;
                  do {
-                     y1 = yMargin + Math.random() * ladderHeight;
-                     attempts++;
+                      y1 = yMargin + Math.random() * ladderHeight;
+                      attempts++;
                  } while (Array.from(rungPositions).some(y => Math.abs(y - y1) < minVGap) && attempts < 100);
                  
                  if (attempts < 100) {
-                     rungPositions.add(y1);
-                     const y2 = y1 + (Math.random() - 0.5) * 20;
-                     ladderData.paths.push({y1, y2, from, to: from + 1});
+                      rungPositions.add(y1);
+                      const y2 = y1 + (Math.random() - 0.5) * 20;
+                      ladderData.paths.push({y1, y2, from, to: from + 1});
                  }
             });
 
-            // 2. 복잡도에 따라 추가 가로줄 생성
             const extraRungCount = Math.max(0, (num * complexity) - (num - 1));
             for(let i = 0; i < extraRungCount; i++) {
                 let y1, attempts = 0;
                 do {
                      y1 = yMargin + Math.random() * ladderHeight;
                      attempts++;
-                 } while (Array.from(rungPositions).some(y => Math.abs(y - y1) < minVGap) && attempts < 100);
+                } while (Array.from(rungPositions).some(y => Math.abs(y - y1) < minVGap) && attempts < 100);
 
                 if (attempts < 100) {
                      rungPositions.add(y1);
                      const from = Math.floor(Math.random()*(num-1));
                      const y2 = y1 + (Math.random() - 0.5) * 20;
                      ladderData.paths.push({y1, y2, from, to: from + 1});
-                 }
+                }
             }
-            // --- 로직 개선 끝 ---
 
             ladderData.connections.forEach(c=>c.to=c.from);
             [...ladderData.paths].sort((a,b)=>a.y1-b.y1).forEach(p=>{
@@ -573,7 +591,6 @@
             const textPadding = fontSize + 15;
             const spacing = width / num;
 
-            // 세로줄
             lCtx.lineWidth=4;
             lCtx.strokeStyle=COLORS.primary;
             for(let i=0;i<num;i++){
@@ -589,7 +606,6 @@
                 lCtx.moveTo(x1,p.y1); lCtx.lineTo(x2,p.y2); lCtx.stroke();
             });
 
-            // 상단 이름
             lCtx.font=`${fontSize}px 'Press Start 2P'`;
             lCtx.textAlign='center';
             lCtx.fillStyle=PURE_BLACK;
@@ -598,18 +614,15 @@
                 lCtx.fillText(ladderData.names[i],x,textPadding);
             }
 
-            // 하단 결과
             lCtx.font=`${fontSize}px 'Press Start 2P'`;
             lCtx.textAlign='center';
             for(let i=0;i<num;i++){
                 const x=spacing*(i+0.5), resultY=height-textPadding+10;
                 
-                // --- ??? 박스 겹침 문제 해결 ---
                 if(ladderData.revealed.has(i)){
                     const resultText = ladderData.results[i];
                     const textWidth = lCtx.measureText(resultText).width;
                     const boxHeight = fontSize + 14;
-                    // 결과 텍스트를 그리기 전에 해당 영역을 배경색으로 덮어씌움
                     lCtx.fillStyle = '#EEE8D5'; 
                     lCtx.fillRect(x - (textWidth + 24)/2, resultY - boxHeight + 3, textWidth + 24, boxHeight);
                     
@@ -623,7 +636,6 @@
                     lCtx.fillStyle=PURE_WHITE;
                     lCtx.fillText('???',x,resultY);
                 }
-                // --- 문제 해결 끝 ---
             }
 
             updateAndDrawLadderSparkles();
@@ -674,12 +686,12 @@
                 for(let i=0;i<rungs.length;i++){
                      const r = rungs[i];
                     if (r.from === current || r.to === current) {
-                        const startY = (r.from === current) ? r.y1 : r.y2;
-                        if (startY >= currentY - 0.1) { // Epsilon for floating point
-                           next = r;
-                           nextIdx = i;
-                           break; 
-                        }
+                         const startY = (r.from === current) ? r.y1 : r.y2;
+                         if (startY >= currentY - 0.1) {
+                             next = r;
+                             nextIdx = i;
+                             break; 
+                         }
                     }
                 }
                 
@@ -702,7 +714,7 @@
             let pathTraceComplete = false;
             function animate(t){
                 if(!start) start=t;
-                let prog=Math.min((t-start)/1500,1); // Faster animation
+                let prog=Math.min((t-start)/1500,1);
                 if(animationSkipped) prog=1;
 
                 if (prog < 1) {
@@ -777,7 +789,7 @@
             const spacing=ladderCanvas.clientWidth/num;
             const fontSize = Math.max(8, Math.min(14, 18 - num));
             const textPadding = fontSize + 15;
-            if(y < textPadding * 2){ // Increase clickable area
+            if(y < textPadding * 2){
                 const idx=Math.floor(x/spacing);
                 if(idx>=0 && idx<num) tracePath(idx);
             }
@@ -789,6 +801,8 @@
         const drawingStatusEl=document.getElementById('drawing-status');
         const drawingResultBtn=document.getElementById('drawing-result-button');
         let drawingState={}, drawCount=1;
+        // [NEW] 뽑기 애니메이션 상태 관리를 위한 객체
+        let drawingAnimationState = { timeoutId: null, resolveFunc: null };
 
         function initDrawing(){
             createDynamicInputs('drawing-participants-container');
@@ -832,47 +846,72 @@
             drawingResultBtn.style.display='none';
         });
 
-        envelopesContainer.addEventListener('click',e=>{
-            const env=e.target.closest('.envelope');
-            if(!env || env.classList.contains('opened') || env.classList.contains('is-opening')) return;
-            if(drawingState.drawsLeft<=0){
-                showResultModal('안내','모든 뽑기를 완료했습니다.');
+        // [REVISED] 뽑기 로직과 스킵 기능을 통합한 이벤트 리스너
+        envelopesContainer.addEventListener('click', e => {
+            // 1. 애니메이션이 진행 중일 경우, 즉시 중단하고 결과를 보여줍니다.
+            if (drawingAnimationState.timeoutId) {
+                clearTimeout(drawingAnimationState.timeoutId);
+                if (drawingAnimationState.resolveFunc) {
+                    drawingAnimationState.resolveFunc();
+                }
+                drawingAnimationState = { timeoutId: null, resolveFunc: null };
                 return;
             }
 
-            env.classList.add('sparkle','is-opening');
-            setTimeout(()=>{
-                env.classList.remove('sparkle');
-                if(drawingState.available.length===0 && !drawingState.allowDuplicates) return;
+            // 2. 새로운 뽑기를 시작합니다.
+            const env = e.target.closest('.envelope');
+            if (!env || env.classList.contains('opened') || env.classList.contains('is-opening')) return;
+            if (drawingState.drawsLeft <= 0) {
+                if(drawingState.summary && drawingState.summary.length > 0) showResultModal('안내', '모든 뽑기를 완료했습니다.');
+                return;
+            }
 
-                const idx=Math.floor(Math.random()*drawingState.available.length);
-                const winner=drawingState.available[idx];
-                env.textContent=winner;
+            env.classList.add('sparkle', 'is-opening');
+
+            // 애니메이션이 끝났을 때(정상 종료 또는 스킵) 실행될 함수
+            const resolveDraw = () => {
+                env.classList.remove('sparkle', 'is-opening');
+
+                if (drawingState.available.length === 0 && !drawingState.allowDuplicates) return;
+
+                const idx = Math.floor(Math.random() * drawingState.available.length);
+                const winner = drawingState.available[idx];
+                env.textContent = winner;
                 env.classList.add('opened');
 
                 drawingState.summary.push(`${drawCount}회차: ${winner}`);
                 drawCount++;
-                drawingResultBtn.style.display='inline-block';
+                drawingResultBtn.style.display = 'inline-block';
 
-                if(drawingState.allowDuplicates){
-                    setTimeout(()=>{
-                        envelopesContainer.querySelectorAll('.envelope').forEach(el=>{
-                            el.textContent='?';
-                            el.classList.remove('opened','is-opening');
+                if (drawingState.allowDuplicates) {
+                    setTimeout(() => {
+                        envelopesContainer.querySelectorAll('.envelope').forEach(el => {
+                            el.textContent = '?';
+                            el.classList.remove('opened', 'is-opening');
                         });
-                    },1500);
-                }else{
-                    drawingState.available.splice(idx,1);
+                    }, 1500);
+                } else {
+                    drawingState.available.splice(idx, 1);
                 }
 
                 drawingState.drawsLeft--;
-                drawingStatusEl.textContent=`남은 횟수: ${drawingState.drawsLeft}`;
-                if(drawingState.drawsLeft===0){
-                    drawingStatusEl.textContent='뽑기 완료!';
-                    setTimeout(()=>showResultModal('뽑기 결과',drawingState.summary),500);
+                drawingStatusEl.textContent = `남은 횟수: ${drawingState.drawsLeft}`;
+                if (drawingState.drawsLeft === 0) {
+                    drawingStatusEl.textContent = '뽑기 완료!';
+                    setTimeout(() => showResultModal('뽑기 결과', drawingState.summary), 500);
                 }
-            },1000);
+            };
+
+            // 스킵할 수 있도록 상태 저장
+            drawingAnimationState.resolveFunc = resolveDraw;
+            drawingAnimationState.timeoutId = setTimeout(() => {
+                if (drawingAnimationState.resolveFunc) {
+                    drawingAnimationState.resolveFunc();
+                }
+                drawingAnimationState = { timeoutId: null, resolveFunc: null };
+            }, 1000);
         });
+
         drawingResultBtn.addEventListener('click',()=>{
             if(drawingState.summary) showResultModal('뽑기 결과',drawingState.summary);
         });
@@ -884,10 +923,15 @@
         const pickNumberButton = document.getElementById('pick-number-button');
         let numberBalls = [];
         let numberPickerAnimationId = null;
-        let numberPickerState = { picking: false, winner: null, phase: 'idle' }; // idle, mixing, announcing, finished
+        let numberPickerState = { picking: false, winner: null, phase: 'idle' };
+        // [NEW] 숫자 뽑기 애니메이션 관리를 위한 변수
+        let numberPickerTimeouts = [];
+        let numberPickerWinner = null;
 
         function initNumberPicker() {
             if (numberPickerAnimationId) cancelAnimationFrame(numberPickerAnimationId);
+            numberPickerTimeouts.forEach(clearTimeout);
+            numberPickerTimeouts = [];
             numberPickerAnimationId = null;
 
             numberBalls = [];
@@ -907,6 +951,36 @@
                     document.getElementById('number-direct-container').style.display = isRange ? 'none' : 'block';
                 };
             });
+        }
+
+        // [NEW] 숫자 뽑기 종료 및 결과 표시를 위한 통합 함수
+        function finishNumberPicking() {
+            numberPickerTimeouts.forEach(clearTimeout);
+            numberPickerTimeouts = [];
+            if (numberPickerAnimationId) {
+                cancelAnimationFrame(numberPickerAnimationId);
+                numberPickerAnimationId = null;
+            }
+
+            if (!numberPickerWinner) {
+                if (numberBalls.length > 0) {
+                   numberPickerWinner = numberBalls[Math.floor(Math.random() * numberBalls.length)];
+                } else {
+                    return;
+                }
+            }
+            const winner = numberPickerWinner;
+            const resultEl = document.getElementById('number-picker-result');
+
+            numberPickerState.phase = 'finished';
+            drawEnlargedWinner(winner);
+            resultEl.textContent = `당첨 숫자: ${winner.num}`;
+            showResultModal('랜덤 숫자 뽑기 결과', `🎉 ${winner.num} 🎉`);
+
+            pickNumberButton.disabled = false;
+            generateNumbersButton.disabled = false;
+            numberPickerState.picking = false;
+            numberPickerWinner = null;
         }
 
         function drawEnlargedWinner(winner) {
@@ -994,7 +1068,6 @@
                         ball.vx += Math.cos(angle) * 1.5;
                         ball.vy += Math.sin(angle) * 1.5;
                     }
-                     // Move other balls off-screen
                     if (ball.x < width / 2) ball.vx -= 0.5; else ball.vx += 0.5;
                     if (ball.y < height / 2) ball.vy -= 0.5; else ball.vy += 0.5;
                 });
@@ -1079,6 +1152,7 @@
             numberPickerLoop();
         }
 
+        // [REVISED] 숫자 뽑기 로직 수정
         function pickNumber() {
             if (numberBalls.length === 0 || numberPickerState.picking) return;
 
@@ -1095,29 +1169,27 @@
                 ball.vy *= (Math.random() * 1.5 + 2);
             });
 
-            setTimeout(() => {
-                const winner = numberBalls[Math.floor(Math.random() * numberBalls.length)];
-                numberPickerState.winner = winner;
+            const mixingTimeout = setTimeout(() => {
+                numberPickerWinner = numberBalls[Math.floor(Math.random() * numberBalls.length)];
+                numberPickerState.winner = numberPickerWinner;
                 numberPickerState.phase = 'announcing';
                 
-                setTimeout(() => {
-                    if (numberPickerAnimationId) cancelAnimationFrame(numberPickerAnimationId);
-                    numberPickerAnimationId = null;
-                    
-                    numberPickerState.phase = 'finished';
-                    drawEnlargedWinner(winner);
-                    resultEl.textContent = `당첨 숫자: ${winner.num}`;
-                    showResultModal('랜덤 숫자 뽑기 결과', `🎉 ${winner.num} 🎉`);
-    
-                    pickNumberButton.disabled = false;
-                    generateNumbersButton.disabled = false;
-                    numberPickerState.picking = false;
-                }, 2500); // Announcing phase duration
-            }, 2000); // Mixing phase duration
+                const announcingTimeout = setTimeout(() => {
+                    finishNumberPicking();
+                }, 2500);
+                numberPickerTimeouts.push(announcingTimeout);
+            }, 2000);
+            numberPickerTimeouts.push(mixingTimeout);
         }
 
         generateNumbersButton.addEventListener('click', generateNumbers);
         pickNumberButton.addEventListener('click', pickNumber);
+        // [NEW] 숫자 뽑기 애니메이션 스킵 기능
+        numberPickerCanvas.addEventListener('click', () => {
+            if (numberPickerState.picking) {
+                finishNumberPicking();
+            }
+        });
 
 
         /* --- 리사이즈 & 초기화 --- */
@@ -1146,4 +1218,3 @@
     </script>
 </body>
 </html>
-
